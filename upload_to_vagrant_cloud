@@ -1,0 +1,83 @@
+#!/usr/bin/env ruby
+
+#
+# This is a script to upload packer images to vagrant cloud for Katello
+#
+# Requirements:
+# - ruby 2.5+ is installed
+# - Vagrant is installed on the machine
+# - Forklift is checked out and is working as expected
+# - Packer is installed and available at /usr/sbin/packer.io
+# - Vagrant cloud CLI is set up
+# - Vagrant cloud API auth is stored in environment variable VAGRANT_CLOUD_API_KEY and available at runtime
+#
+#
+require 'optparse'
+require 'date'
+
+options = {}
+OptionParser.new do |opts|
+  opts.banner = "Usage: upload_to_vagrant_cloud [options]"
+
+  opts.on("-b", "--box-name BOXNAME", "Namespace in vagrant cloud") do |name|
+    options[:box_name] = name
+  end
+
+  opts.on("-f", "--box-file BOXFILE", ".box image file resulting from build") do |file|
+    options[:box_file] = file
+  end
+
+  opts.on("-t", "--box-type BOXTYPE", "type such as 'devel', 'nightly' that will be appended to 'katello-'") do |type|
+    options[:box_type] = type
+  end
+
+  opts.on("-e", "--box-template BOXTEMPLATE", "box JSON file template in forklift") do |template|
+    options[:box_template] = template
+  end
+
+
+  opts.on("-d", "--forklift-dir FORKLIFTDIR", "location of forklift directory") do |dir|
+    options[:forklift_dir] = dir
+  end
+end.parse!
+
+def run_cmd(command, failed_msg: "Something went wrong!", success_msg: nil, show_cmd: false)
+  puts command if show_cmd
+  result = `#{command}`
+  if $?.success?
+    puts success_msg if success_msg
+  else
+    # Only print failed result so logs don't get too large
+    puts result
+    fail failed_msg
+  end
+end
+
+
+fail "Must pass in --forklift-dir" unless options[:forklift_dir]
+fail "Must pass in --box_template" unless options[:box_template]
+fail "Must pass in --box_name" unless options[:box_name]
+fail "Must pass in --box_file" unless options[:box_file]
+fail "Must pass in --box-type" unless options[:box_type]
+fail "No environment variable VAGRANT_CLOUD_API_KEY found!" unless ENV["VAGRANT_CLOUD_API_KEY"]
+
+Dir.chdir(options[:forklift_dir]) do
+  run_cmd "git stash"
+  run_cmd "git checkout master"
+  run_cmd "git fetch --all"
+  run_cmd "git reset --hard origin/master"
+end
+
+description = "A stable katello #{options[:box_type]} environment created with packer"
+short_description = "stable katello #{options[:box_type]} box"
+dated_version = DateTime.now.strftime("%Y.%m%d.%H%M")
+
+Dir.chdir(File.join(options[:forklift_dir], "packer")) do
+  puts "Building box..."
+  run_cmd("/usr/sbin/packer.io build #{options[:box_template]}", failed_msg: "Box failed to build!", success_msg: "Box built successfully!", show_cmd: true)
+
+  puts "Uploading to vagrant cloud..."
+  run_cmd("vagrant cloud auth login -t #{ENV["VAGRANT_CLOUD_API_KEY"]}", failed_msg: "login to vagrant cloud failed!")
+  run_cmd("vagrant cloud publish -f #{options[:box_name]} #{dated_version} libvirt #{options[:box_file]} -d \"#{description}\" --version-description \"nightly publish\" --release --short-description \"#{short_description}\"", success_msg: "Box successfully uploaded to vagrant cloud", failed_msg: "Box failed to upload to vagrant cloud!", show_cmd: true)
+end
+
