@@ -78,6 +78,6 @@ Dir.chdir(File.join(options[:forklift_dir], "packer")) do
 
   puts "Uploading to vagrant cloud..."
   run_cmd("vagrant cloud auth login -t #{ENV["VAGRANT_CLOUD_API_KEY"]}", failed_msg: "login to vagrant cloud failed!")
-  run_cmd("vagrant cloud publish -f #{options[:box_name]} #{dated_version} libvirt #{options[:box_file]} -d \"#{description}\" --version-description \"nightly publish\" --release --short-description \"#{short_description}\"", success_msg: "Box successfully uploaded to vagrant cloud", failed_msg: "Box failed to upload to vagrant cloud!", show_cmd: true)
+  run_cmd("vagrant cloud publish -f -r -d \"#{description}\" --version-description \"nightly publish\" -s \"#{short_description}\" #{options[:box_name]} #{dated_version} libvirt #{options[:box_file]}", success_msg: "Box successfully uploaded to vagrant cloud", failed_msg: "Box failed to upload to vagrant cloud!", show_cmd: true)
 end
 
