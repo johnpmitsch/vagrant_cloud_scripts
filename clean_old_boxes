@@ -1,0 +1,59 @@
+#!/usr/bin/env ruby
+#
+# Deletes all versions of a box older than a month from Vagrant cloud
+# Requires:
+#  - ruby 2.5+
+#  - bundle install before running
+#  - VAGRANT_CLOUD_API_KEY to have API key at runtime.
+#
+# Example Usage:
+# ./clean_old_boxes katello/katello-devel
+# 
+
+require "faraday"
+require 'json'
+require 'date'
+
+fail "Must enter box name as first argument" unless ARGV[0]
+BOX_NAME = ARGV[0]
+BASE_URL = "https://app.vagrantup.com"
+HEADERS = {"Authorization" => "Bearer #{ENV['VAGRANT_CLOUD_API_KEY']}"}
+
+api = Faraday.new(
+  url: BASE_URL,
+  headers: HEADERS 
+)
+
+old_versions = []
+last_month = DateTime.now.prev_month.strftime("%Y.%m%d.%H%M")
+last_month_version = Gem::Version.new(last_month)
+
+response = api.get("/api/v1/box/#{BOX_NAME}/")
+
+if response.success?
+  boxes = JSON.parse(response.body)
+  old_versions = boxes["versions"].select do |box| 
+    Gem::Version.new(box["version"]) < last_month_version
+  end.map { |b| b["version"] }
+else
+  p response.code, response.body
+end
+
+puts "No old versions found for #{BOX_NAME}" if old_versions.empty?
+
+old_versions.each do |old_version|
+  puts "deleting #{old_version}"
+  sleep 0.5
+  url = "/api/v1/box/#{BOX_NAME}/version/#{old_version}/"
+  puts url
+  response = api.delete(url)
+
+  if response.success?
+    puts "#{BOX_NAME} #{old_version} deleted"
+  else
+    failed_response = JSON.parse(response.body);
+    p failed_response
+    fail "Failed to delete box, aborting script"
+  end
+end
+

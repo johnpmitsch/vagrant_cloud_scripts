@@ -53,3 +53,7 @@ ExecStart=/home/jomitsch/katello-packer/upload_to_vagrant_cloud -b katello/katel
 The service will execute the script when specified by the timer. This service will log to journalctl `journalctl -u katello-nightly-stable-box` when running.
 
 Note: You probably will run into SELinux issues if you have it enabled on your system. You can check this by starting the service (but don't enable), which will execute the script. Check journalctl for logs and use audit2allow or similar to give proper access. 
+
+## Box cleanup
+
+The `./clean_old_boxes` script can be used to delete boxes older than a month from Vagrant cloud. See the comments in the script for setup and usage.
